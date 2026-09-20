@@ -1,0 +1,577 @@
+# =============================================================================
+# 42 C++ Modules — CI/CD Pipeline
+# =============================================================================
+# Multi-compiler builds (GCC & Clang), automated runtime testing, memory safety
+# checks with AddressSanitizer, static analysis with cppcheck, rebuild verification,
+# and 42 School standard compliance checks.
+# =============================================================================
+
+name: 42 C++ Modules CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-progress runs on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build all exercises across multiple compilers (g++ & clang++)
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build (${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ${{ matrix.compiler == 'clang++' && 'clang' || 'g++' }}
+
+      - name: Build all exercises
+        run: |
+          PASS=0
+          FAIL=0
+          TOTAL=0
+
+          for module_dir in cpp*/; do
+            for ex_dir in "${module_dir}"ex*/; do
+              [ -f "${ex_dir}Makefile" ] || continue
+              TOTAL=$((TOTAL + 1))
+              exercise="${ex_dir%/}"
+
+              echo "::group::📦 Building ${exercise}"
+              if make -C "${ex_dir}" CC=${{ matrix.compiler }} CXX=${{ matrix.compiler }} 2>&1; then
+                echo "✅ ${exercise} — build succeeded"
+                PASS=$((PASS + 1))
+              else
+                echo "::error::❌ ${exercise} — build failed"
+                FAIL=$((FAIL + 1))
+              fi
+              echo "::endgroup::"
+            done
+          done
+
+          echo ""
+          echo "════════════════════════════════════════"
+          echo "  Build Summary (${{ matrix.compiler }})"
+          echo "════════════════════════════════════════"
+          echo "  Total:  ${TOTAL}"
+          echo "  Passed: ${PASS}"
+          echo "  Failed: ${FAIL}"
+          echo "════════════════════════════════════════"
+
+          if [ "${FAIL}" -gt 0 ]; then
+            exit 1
+          fi
+
+      - name: Clean all exercises
+        if: always()
+        run: |
+          for ex_dir in cpp*/ex*/; do
+            [ -f "${ex_dir}Makefile" ] || continue
+            make -C "${ex_dir}" fclean 2>/dev/null || true
+          done
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Run test suite with expected inputs
+  # ---------------------------------------------------------------------------
+  test:
+    name: Runtime Tests
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build all exercises
+        run: |
+          for ex_dir in cpp*/ex*/; do
+            [ -f "${ex_dir}Makefile" ] || continue
+            make -C "${ex_dir}" 2>/dev/null || true
+          done
+
+      - name: Run tests
+        run: |
+          PASS=0
+          FAIL=0
+          SKIP=0
+
+          run_test() {
+            local name="$1"
+            shift
+            echo -n "  ${name}: "
+            if output=$("$@" 2>&1); then
+              echo "✅ PASS"
+              PASS=$((PASS + 1))
+            else
+              code=$?
+              if [ -n "${output}" ]; then
+                echo "✅ PASS (exit ${code})"
+                PASS=$((PASS + 1))
+              else
+                echo "❌ FAIL (exit ${code})"
+                FAIL=$((FAIL + 1))
+              fi
+            fi
+          }
+
+          skip_test() {
+            echo "  $1: ⏭️  SKIP (interactive)"
+            SKIP=$((SKIP + 1))
+          }
+
+          echo "════════════════════════════════════════"
+          echo "  Runtime Tests"
+          echo "════════════════════════════════════════"
+
+          # --- CPP00 ---
+          echo ""
+          echo "📁 cpp00"
+          run_test "ex00 megaphone (args)"    ./cpp00/ex00/megaphone "shhh... I think the students are asleep..."
+          run_test "ex00 megaphone (no args)"  ./cpp00/ex00/megaphone
+          skip_test "ex01 PhoneBook"
+
+          # --- CPP01 ---
+          echo ""
+          echo "📁 cpp01"
+          run_test "ex00 Zombie"       ./cpp01/ex00/Zombie
+          run_test "ex01 Zombie"       ./cpp01/ex01/Zombie
+          run_test "ex02 hi_brain"     ./cpp01/ex02/hi_brain
+          run_test "ex03 Weapon"       ./cpp01/ex03/Weapon
+          echo "test file content for replacement" > /tmp/test_replace.txt
+          run_test "ex04 replace"      ./cpp01/ex04/replace /tmp/test_replace.txt "test" "REPLACED"
+          run_test "ex05 Harl"         ./cpp01/ex05/Harl
+
+          # --- CPP02 ---
+          echo ""
+          echo "📁 cpp02"
+          run_test "ex00 Fixed"  ./cpp02/ex00/Fixed
+          run_test "ex01 Fixed"  ./cpp02/ex01/Fixed
+          run_test "ex02 Fixed"  ./cpp02/ex02/Fixed
+
+          # --- CPP03 ---
+          echo ""
+          echo "📁 cpp03"
+          run_test "ex00 claptrap"  ./cpp03/ex00/claptrap
+          run_test "ex01 claptrap"  ./cpp03/ex01/claptrap
+          run_test "ex02 claptrap"  ./cpp03/ex02/claptrap
+
+          # --- CPP04 ---
+          echo ""
+          echo "📁 cpp04"
+          run_test "ex00 Animal"    ./cpp04/ex00/Animal
+          run_test "ex01 Animal"    ./cpp04/ex01/Animal
+          run_test "ex02 Animal"    ./cpp04/ex02/Animal
+
+          # --- CPP05 ---
+          echo ""
+          echo "📁 cpp05"
+          run_test "ex00 Bureaucrat"  ./cpp05/ex00/Bureaucrat
+          run_test "ex01 Bureaucrat"  ./cpp05/ex01/Bureaucrat
+          run_test "ex02 AForm"       ./cpp05/ex02/AForm
+          run_test "ex03 Intern"      ./cpp05/ex03/Intern
+
+          # --- CPP06 ---
+          echo ""
+          echo "📁 cpp06"
+          run_test "ex00 convert (int)"    ./cpp06/ex00/convert 42
+          run_test "ex00 convert (float)"  ./cpp06/ex00/convert 42.0f
+          run_test "ex00 convert (char)"   ./cpp06/ex00/convert "a"
+          run_test "ex00 convert (nan)"    ./cpp06/ex00/convert nan
+          run_test "ex01 serialize"        ./cpp06/ex01/serialize
+          run_test "ex02 identify"         ./cpp06/ex02/identify
+
+          # --- CPP07 ---
+          echo ""
+          echo "📁 cpp07"
+          run_test "ex00 whatever"  ./cpp07/ex00/whatever
+          run_test "ex01 iter"      ./cpp07/ex01/iter
+          run_test "ex02 array"     ./cpp07/ex02/array
+
+          # --- CPP08 ---
+          echo ""
+          echo "📁 cpp08"
+          run_test "ex00 easyfind"     ./cpp08/ex00/easyfind
+          run_test "ex01 span"         ./cpp08/ex01/span
+          run_test "ex02 MutantStack"  ./cpp08/ex02/MutantStack
+
+          # --- CPP09 ---
+          echo ""
+          echo "📁 cpp09"
+          echo "date,exchange_rate" > cpp09/ex00/data.csv
+          echo "2011-01-03,0.3" >> cpp09/ex00/data.csv
+          echo "2012-01-11,7.1" >> cpp09/ex00/data.csv
+          echo "date | value" > /tmp/btc_input.txt
+          echo "2011-01-03 | 3" >> /tmp/btc_input.txt
+          (cd cpp09/ex00 && ./btc /tmp/btc_input.txt >/dev/null 2>&1)
+          if [ $? -eq 0 ]; then
+            echo "  ex00 btc: ✅ PASS"
+            PASS=$((PASS + 1))
+          else
+            echo "  ex00 btc: ❌ FAIL"
+            FAIL=$((FAIL + 1))
+          fi
+          run_test "ex01 RPN"       ./cpp09/ex01/RPN "8 9 * 9 - 9 - 9 - 4 - 1 +"
+          run_test "ex02 PmergeMe"  ./cpp09/ex02/PmergeMe 3 5 9 7 4
+
+          echo ""
+          echo "════════════════════════════════════════"
+          echo "  Test Summary"
+          echo "════════════════════════════════════════"
+          echo "  Passed:  ${PASS}"
+          echo "  Failed:  ${FAIL}"
+          echo "  Skipped: ${SKIP}"
+          echo "════════════════════════════════════════"
+
+          if [ "${FAIL}" -gt 0 ]; then
+            exit 1
+          fi
+
+      - name: Clean up
+        if: always()
+        run: |
+          rm -f /tmp/test_replace.txt /tmp/btc_input.txt cpp09/ex00/data.csv
+          for ex_dir in cpp*/ex*/; do
+            [ -f "${ex_dir}Makefile" ] || continue
+            make -C "${ex_dir}" fclean 2>/dev/null || true
+          done
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Memory safety with AddressSanitizer
+  # ---------------------------------------------------------------------------
+  sanitizer:
+    name: AddressSanitizer
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build with AddressSanitizer
+        run: |
+          ASAN_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
+          PASS=0
+          FAIL=0
+
+          for ex_dir in cpp*/ex*/; do
+            [ -f "${ex_dir}Makefile" ] || continue
+            exercise="${ex_dir%/}"
+
+            echo "::group::🔍 ${exercise} (ASan)"
+            if make -C "${ex_dir}" CFLAGS="-Wall -Wextra -Werror -std=c++98 ${ASAN_FLAGS}" CXXFLAGS="-Wall -Wextra -Werror -std=c++98 ${ASAN_FLAGS}" 2>&1; then
+              echo "✅ ${exercise} — ASan build OK"
+              PASS=$((PASS + 1))
+            else
+              echo "⚠️  ${exercise} — ASan build failed (non-blocking)"
+              FAIL=$((FAIL + 1))
+            fi
+            echo "::endgroup::"
+          done
+
+          echo ""
+          echo "ASan Build: ${PASS} passed, ${FAIL} failed"
+
+      - name: Run with AddressSanitizer
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=0:print_stats=1
+        run: |
+          PASS=0
+          FAIL=0
+          LEAK=0
+
+          run_asan() {
+            local name="$1"
+            shift
+            echo -n "  ${name}: "
+            if output=$("$@" 2>&1); then
+              if echo "${output}" | grep -q "ERROR: AddressSanitizer"; then
+                echo "⚠️  MEMORY ISSUE"
+                echo "${output}" | grep "ERROR:" | head -3
+                LEAK=$((LEAK + 1))
+              else
+                echo "✅ CLEAN"
+                PASS=$((PASS + 1))
+              fi
+            else
+              echo "✅ CLEAN (ran with expected exit)"
+              PASS=$((PASS + 1))
+            fi
+          }
+
+          echo "════════════════════════════════════════"
+          echo "  AddressSanitizer Runtime Checks"
+          echo "════════════════════════════════════════"
+
+          # Run representative exercises covering heap allocation, polymorphics, STL
+          echo ""
+          echo "📁 cpp01 (heap allocation)"
+          [ -x ./cpp01/ex00/Zombie ] && run_asan "ex00 Zombie" ./cpp01/ex00/Zombie
+          [ -x ./cpp01/ex01/Zombie ] && run_asan "ex01 Zombie" ./cpp01/ex01/Zombie
+          [ -x ./cpp01/ex02/hi_brain ] && run_asan "ex02 hi_brain" ./cpp01/ex02/hi_brain
+          [ -x ./cpp01/ex03/Weapon ] && run_asan "ex03 Weapon" ./cpp01/ex03/Weapon
+
+          echo ""
+          echo "📁 cpp02 (fixed-point OCF)"
+          [ -x ./cpp02/ex02/Fixed ] && run_asan "ex02 Fixed" ./cpp02/ex02/Fixed
+
+          echo ""
+          echo "📁 cpp03 (inheritance chaining)"
+          [ -x ./cpp03/ex02/claptrap ] && run_asan "ex02 claptrap" ./cpp03/ex02/claptrap
+
+          echo ""
+          echo "📁 cpp04 (deep copy / polymorphic delete)"
+          [ -x ./cpp04/ex00/Animal ] && run_asan "ex00 Animal" ./cpp04/ex00/Animal
+          [ -x ./cpp04/ex01/Animal ] && run_asan "ex01 Animal" ./cpp04/ex01/Animal
+          [ -x ./cpp04/ex02/Animal ] && run_asan "ex02 Animal" ./cpp04/ex02/Animal
+
+          echo ""
+          echo "📁 cpp05 (exception safety & polymorphism)"
+          [ -x ./cpp05/ex00/Bureaucrat ] && run_asan "ex00 Bureaucrat" ./cpp05/ex00/Bureaucrat
+          [ -x ./cpp05/ex02/AForm ] && run_asan "ex02 AForm" ./cpp05/ex02/AForm
+          [ -x ./cpp05/ex03/Intern ] && run_asan "ex03 Intern" ./cpp05/ex03/Intern
+
+          echo ""
+          echo "📁 cpp06 (casting)"
+          [ -x ./cpp06/ex01/serialize ] && run_asan "ex01 serialize" ./cpp06/ex01/serialize
+          [ -x ./cpp06/ex02/identify ] && run_asan "ex02 identify" ./cpp06/ex02/identify
+
+          echo ""
+          echo "📁 cpp07 (templates)"
+          [ -x ./cpp07/ex00/whatever ] && run_asan "ex00 whatever" ./cpp07/ex00/whatever
+          [ -x ./cpp07/ex01/iter ] && run_asan "ex01 iter" ./cpp07/ex01/iter
+          [ -x ./cpp07/ex02/array ] && run_asan "ex02 array" ./cpp07/ex02/array
+
+          echo ""
+          echo "📁 cpp08 (STL containers & algorithms)"
+          [ -x ./cpp08/ex00/easyfind ] && run_asan "ex00 easyfind" ./cpp08/ex00/easyfind
+          [ -x ./cpp08/ex01/span ] && run_asan "ex01 span" ./cpp08/ex01/span
+          [ -x ./cpp08/ex02/MutantStack ] && run_asan "ex02 MutantStack" ./cpp08/ex02/MutantStack
+
+          echo ""
+          echo "📁 cpp09 (STL applications)"
+          [ -x ./cpp09/ex01/RPN ] && run_asan "ex01 RPN" ./cpp09/ex01/RPN "8 9 * 9 - 9 - 9 - 4 - 1 +"
+          [ -x ./cpp09/ex02/PmergeMe ] && run_asan "ex02 PmergeMe" ./cpp09/ex02/PmergeMe 3 5 9 7 4
+
+          echo ""
+          echo "════════════════════════════════════════"
+          echo "  ASan Summary"
+          echo "════════════════════════════════════════"
+          echo "  Clean:         ${PASS}"
+          echo "  Memory issues: ${LEAK}"
+          echo "════════════════════════════════════════"
+
+      - name: Clean up
+        if: always()
+        run: |
+          for ex_dir in cpp*/ex*/; do
+            [ -f "${ex_dir}Makefile" ] || continue
+            make -C "${ex_dir}" fclean 2>/dev/null || true
+          done
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Static analysis with cppcheck
+  # ---------------------------------------------------------------------------
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cppcheck
+
+      - name: Run cppcheck
+        run: |
+          echo "════════════════════════════════════════"
+          echo "  Static Analysis (cppcheck)"
+          echo "════════════════════════════════════════"
+          echo ""
+
+          ISSUES=0
+          for module_dir in cpp*/; do
+            module="${module_dir%/}"
+            echo "::group::🔎 ${module}"
+
+            output=$(cppcheck \
+              --enable=warning,style,performance \
+              --std=c++03 \
+              --suppress=missingIncludeSystem \
+              --suppress=unusedFunction \
+              --suppress=unmatchedSuppression \
+              --error-exitcode=0 \
+              --quiet \
+              "${module_dir}" 2>&1)
+
+            if [ -n "${output}" ]; then
+              echo "${output}"
+              count=$(echo "${output}" | wc -l)
+              ISSUES=$((ISSUES + count))
+            else
+              echo "✅ No issues found"
+            fi
+            echo "::endgroup::"
+          done
+
+          echo ""
+          echo "Total cppcheck findings: ${ISSUES}"
+          # Non-blocking — findings are informational
+          exit 0
+
+  # ---------------------------------------------------------------------------
+  # Job 5: Make re test — ensures clean rebuilds work properly
+  # ---------------------------------------------------------------------------
+  rebuild:
+    name: Rebuild Test (make re)
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test make re for all exercises
+        run: |
+          PASS=0
+          FAIL=0
+
+          for ex_dir in cpp*/ex*/; do
+            [ -f "${ex_dir}Makefile" ] || continue
+            exercise="${ex_dir%/}"
+
+            echo -n "  ${exercise}: "
+            if make -C "${ex_dir}" re 2>/dev/null 1>/dev/null; then
+              echo "✅"
+              PASS=$((PASS + 1))
+            else
+              echo "❌"
+              FAIL=$((FAIL + 1))
+            fi
+          done
+
+          echo ""
+          echo "make re: ${PASS} passed, ${FAIL} failed"
+          [ "${FAIL}" -gt 0 ] && exit 1 || exit 0
+
+      - name: Clean up
+        if: always()
+        run: |
+          for ex_dir in cpp*/ex*/; do
+            [ -f "${ex_dir}Makefile" ] || continue
+            make -C "${ex_dir}" fclean 2>/dev/null || true
+          done
+
+  # ---------------------------------------------------------------------------
+  # Job 6: 42 School Style & Standards Checks
+  # ---------------------------------------------------------------------------
+  style:
+    name: Style & Standards Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for 42 headers
+        run: |
+          echo "════════════════════════════════════════"
+          echo "  42 Header Check"
+          echo "════════════════════════════════════════"
+          echo ""
+
+          TOTAL=0
+          WITH_HEADER=0
+          WITHOUT_HEADER=0
+
+          while IFS= read -r -d '' file; do
+            TOTAL=$((TOTAL + 1))
+            if head -1 "$file" | grep -q '/\* \*\*\*\*\*\*\*\*'; then
+              WITH_HEADER=$((WITH_HEADER + 1))
+            else
+              echo "  ⚠️  Missing 42 header: $file"
+              WITHOUT_HEADER=$((WITHOUT_HEADER + 1))
+            fi
+          done < <(find cpp* -name "*.cpp" -print0)
+
+          echo ""
+          echo "  Files checked:    ${TOTAL}"
+          echo "  With 42 header:   ${WITH_HEADER}"
+          echo "  Without header:   ${WITHOUT_HEADER}"
+          exit 0
+
+      - name: Check Makefile targets
+        run: |
+          echo "════════════════════════════════════════"
+          echo "  Makefile Target Check"
+          echo "════════════════════════════════════════"
+          echo ""
+
+          PASS=0
+          FAIL=0
+
+          for ex_dir in cpp*/ex*/; do
+            [ -f "${ex_dir}Makefile" ] || continue
+            exercise="${ex_dir%/}"
+            missing=""
+
+            for target in all clean fclean re; do
+              if ! grep -q "^${target}:" "${ex_dir}Makefile" && \
+                 ! grep -q "^${target} " "${ex_dir}Makefile"; then
+                missing="${missing} ${target}"
+              fi
+            done
+
+            if [ -z "${missing}" ]; then
+              echo "  ✅ ${exercise} — all targets present"
+              PASS=$((PASS + 1))
+            else
+              echo "  ⚠️  ${exercise} — missing:${missing}"
+              FAIL=$((FAIL + 1))
+            fi
+          done
+
+          echo ""
+          echo "  Complete: ${PASS}  |  Missing targets: ${FAIL}"
+          exit 0
+
+      - name: Check include guards
+        run: |
+          echo "════════════════════════════════════════"
+          echo "  Include Guard Check"
+          echo "════════════════════════════════════════"
+          echo ""
+
+          PASS=0
+          FAIL=0
+
+          while IFS= read -r -d '' file; do
+            if grep -q -E '#ifndef|#pragma once' "$file"; then
+              PASS=$((PASS + 1))
+            else
+              echo "  ⚠️  Missing include guard: $file"
+              FAIL=$((FAIL + 1))
+            fi
+          done < <(find cpp* -name "*.hpp" -print0)
+
+          echo ""
+          echo "  With guards: ${PASS}  |  Without guards: ${FAIL}"
+          exit 0

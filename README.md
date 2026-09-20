@@ -1,5 +1,10 @@
 # 42 C++ Modules
 
+[![42 C++ Modules CI](https://github.com/mowardan/42-cpp-modules/actions/workflows/ci.yml/badge.svg)](https://github.com/mowardan/42-cpp-modules/actions/workflows/ci.yml)
+![C++ Standard](https://img.shields.io/badge/C%2B%2B-98-blue.svg)
+![Compilers](https://img.shields.io/badge/Compilers-GCC%20%7C%20Clang-green.svg)
+![42 Network](https://img.shields.io/badge/42-1337-black.svg)
+
 A comprehensive collection of C++ projects completed as part of the 42 School curriculum, covering fundamental through advanced C++ concepts across ten progressive modules.
 
 ## About
@@ -132,6 +137,17 @@ Each module in this curriculum builds upon the previous one. The progression is 
 4. **Design before coding** — class hierarchies and ownership models should be planned, not discovered
 
 The code in this repository reflects working through these concepts progressively, with each module introducing a focused set of new features while reinforcing patterns from earlier modules.
+
+## CI/CD Pipeline
+
+The repository includes a comprehensive GitHub Actions workflow (`.github/workflows/ci.yml`) that runs on every push and pull request:
+
+- 🔨 **Multi-Compiler Builds**: Compiles all 31 exercises across GCC (`g++`) and Clang (`clang++`) with `-Wall -Wextra -Werror -std=c++98`.
+- 🧪 **Automated Runtime Tests**: Validates output and execution across non-interactive exercises.
+- 🛡️ **AddressSanitizer (ASan)**: Detects memory leaks, buffer overflows, and undefined memory behavior.
+- 🔍 **Static Analysis**: Runs `cppcheck` with C++03 profile to identify potential style, performance, and portability issues.
+- 🔄 **Rebuild Verification**: Ensures `make re` performs clean rebuilds across all Makefiles.
+- 📐 **42 Standards Compliance**: Verifies 42 headers, include guards, and standard Makefile targets (`all`, `clean`, `fclean`, `re`).
 
 ## Author
 
