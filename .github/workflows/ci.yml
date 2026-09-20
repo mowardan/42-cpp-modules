@@ -54,14 +54,22 @@ jobs:
               exercise="${ex_dir%/}"
 
               echo "::group::📦 Building ${exercise}"
-              if make -C "${ex_dir}" CC=${{ matrix.compiler }} CXX=${{ matrix.compiler }} 2>&1; then
+              build_log=$(make -C "${ex_dir}" CC=${{ matrix.compiler }} CXX=${{ matrix.compiler }} 2>&1)
+              exit_code=$?
+              echo "${build_log}"
+              echo "::endgroup::"
+
+              if [ ${exit_code} -eq 0 ]; then
                 echo "✅ ${exercise} — build succeeded"
                 PASS=$((PASS + 1))
               else
                 echo "::error::❌ ${exercise} — build failed"
+                echo "────────────────────────────────────────"
+                echo "❌ Build failure log for ${exercise}:"
+                echo "${build_log}"
+                echo "────────────────────────────────────────"
                 FAIL=$((FAIL + 1))
               fi
-              echo "::endgroup::"
             done
           done
 

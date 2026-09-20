@@ -1,7 +1,7 @@
 
 #include "PmergeMe.hpp"
 
-PmergeMe::PmergeMe() {};
+PmergeMe::PmergeMe() {}
 
 PmergeMe::PmergeMe(int argc, char **argv)
 {
@@ -36,7 +36,7 @@ PmergeMe::PmergeMe(int argc, char **argv)
         throw std::invalid_argument("Error: duplicate number found");
 }
 
-PmergeMe::PmergeMe(const PmergeMe &copy) : m_vector(copy.m_vector), m_deque(copy.m_deque) {};
+PmergeMe::PmergeMe(const PmergeMe &copy) : m_vector(copy.m_vector), m_deque(copy.m_deque) {}
 
 PmergeMe &PmergeMe::operator=(const PmergeMe &other)
 {
@@ -46,14 +46,14 @@ PmergeMe &PmergeMe::operator=(const PmergeMe &other)
         m_deque = other.m_deque;
     }
     return *this;
-};
+}
 
-PmergeMe::~PmergeMe() {};
+PmergeMe::~PmergeMe() {}
 
 std::vector<int> &PmergeMe::get_vector()
 {
     return m_vector;
-};
+}
 
 std::deque<int> &PmergeMe::get_deque()
 {
