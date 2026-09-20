@@ -2,6 +2,8 @@
 # define  ARRAY_HPP
 
 #include <iostream>
+#include <stdexcept>
+#include <cstddef>
 
 template <typename T>
 class Array
@@ -10,7 +12,7 @@ private:
   T *array;
   size_t array_size;
 public:
-  Array() : array(nullptr), array_size(0) {}
+  Array() : array(NULL), array_size(0) {}
   Array(unsigned int n) : array(new T[n]()), array_size(n) {}
   Array(const Array &other) : array(new T[other.array_size]()), array_size(other.array_size)
   {

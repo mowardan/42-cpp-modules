@@ -121,7 +121,7 @@ private:
     size_t array_size;
 
 public:
-    Array();                          // Empty array (nullptr, size 0)
+    Array();                          // Empty array (NULL, size 0)
     Array(unsigned int n);            // Array of n value-initialized elements
     Array(const Array& other);        // Deep copy
     ~Array();                         // delete[]
