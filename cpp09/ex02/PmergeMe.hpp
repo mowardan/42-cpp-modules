@@ -9,14 +9,16 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
+#include <cstdlib>
+#include <climits>
 
 struct Pair
 {
     int winner;
     int loser;
 
-    Pair(): winner(0), loser(0) {};
-    Pair(int w, int l) : winner(w), loser(l) {};
+    Pair(): winner(0), loser(0) {}
+    Pair(int w, int l) : winner(w), loser(l) {}
 };
 
 

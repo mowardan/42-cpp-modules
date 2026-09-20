@@ -23,7 +23,7 @@ PmergeMe::PmergeMe(int argc, char **argv)
             num = std::strtol(token.c_str(), &end, 10);
             if (num < 0)
                 throw std::invalid_argument("Error: numbers must be positive");
-            if (num > __INT_MAX__)
+            if (num > INT_MAX)
                 throw std::invalid_argument("Error: too large number");
 
             m_vector.push_back(num);
