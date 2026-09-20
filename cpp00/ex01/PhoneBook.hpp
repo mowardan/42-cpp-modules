@@ -15,6 +15,4 @@ public:
     void display_element(void);
 };
 
-static std::string truncate(std::string str);
-
 #endif
